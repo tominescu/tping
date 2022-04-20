@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -17,15 +19,38 @@ func main() {
 	if len(os.Args) >= 3 {
 		port = os.Args[2]
 	}
+
 	addrStr := host + ":" + port
+	fmt.Printf("PING %v with tcp connecton\n", addrStr)
+
+	succ := 0
+	fail := 0
+
+	c := make(chan os.Signal)
+	signal.Notify(c, syscall.SIGINT)
+	go func() {
+		<-c
+		stat(addrStr, succ, fail)
+		os.Exit(0)
+	}()
+
 	for {
 		bt := time.Now()
-		_, err := net.DialTimeout("tcp", addrStr, 5*time.Second)
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-		}
+		conn, err := net.DialTimeout("tcp", addrStr, 3*time.Second)
 		d := time.Now().Sub(bt)
-		fmt.Printf("Ping %v time cost:%4dms\n", addrStr, d.Milliseconds())
+		if err != nil {
+			fmt.Printf("ping %v error: %v, time cost:%4dms\n", addrStr, err, d.Milliseconds())
+			fail++
+		} else {
+			fmt.Printf("ping %v (%v) time cost:%4dms\n", addrStr, conn.RemoteAddr(), d.Milliseconds())
+			succ++
+			conn.Close()
+		}
 		time.Sleep(time.Second)
 	}
+}
+
+func stat(addrStr string, succ, fail int) {
+	fmt.Printf("\n--- %v ping statistics ---\n", addrStr)
+	fmt.Printf("%v requests send, %v responsed, %v lost, %v%% response lost\n", succ+fail, succ, fail, 100*fail/(succ+fail))
 }
